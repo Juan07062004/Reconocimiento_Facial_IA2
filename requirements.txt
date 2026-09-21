@@ -1,0 +1,25 @@
+# Dependencias del proyecto de reconocimiento facial local.
+# Instalar con:  pip install -r requirements.txt
+#
+# Se fijan versiones concretas para que el proyecto se comporte igual en
+# cualquier computador. Solo lo imprescindible: nada de frameworks web,
+# servidores ni servicios en la nube.
+
+# Operaciones con vectores (embeddings). Se mantiene en la serie 1.x porque
+# es la que InsightFace y ONNX Runtime tienen mejor probada.
+numpy==1.26.4
+
+# Camara y procesamiento basico de imagen.
+opencv-python==4.10.0.84
+
+# Ejecuta los modelos preentrenados (.onnx) en CPU.
+onnxruntime==1.19.2
+
+# Deteccion de rostros y generacion de embeddings con modelos preentrenados.
+# Se usa la 1.0.1 y NO la 0.7.3 porque esta publica un paquete puro de Python:
+# la 0.7.3 obliga a compilar una extension en C y en Windows exige instalar
+# Visual Studio Build Tools, lo que rompe la portabilidad del proyecto.
+insightface==1.0.1
+
+# Necesaria para mostrar los frames de OpenCV dentro de Tkinter.
+Pillow==10.4.0
