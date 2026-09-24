@@ -23,3 +23,10 @@ insightface==1.0.1
 
 # Necesaria para mostrar los frames de OpenCV dentro de Tkinter.
 Pillow==10.4.0
+
+﻿# Dependencias del proyecto de reconocimiento facial (probadas con Python 3.10)
+insightface>=0.7.3
+onnxruntime>=1.16.0
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0
+tqdm>=4.65.0
