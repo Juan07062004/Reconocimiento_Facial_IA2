@@ -1,27 +1,11 @@
-# ---------------------------------------------------------------------------
-# DATOS PERSONALES / BIOMETRICOS - NUNCA se suben a un repositorio
-# ---------------------------------------------------------------------------
+# Datos sensibles / pesados: nunca subir
+# Fotos grupales anotadas (pueden incluir terceros)
+resultados/
 faces/
 database/
 logs/
 modelos/
-
-# ---------------------------------------------------------------------------
-# Entorno virtual y artefactos de Python
-# ---------------------------------------------------------------------------
-.venv/
-venv/
-env/
 __pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-
-# ---------------------------------------------------------------------------
-# Sistema operativo / editores
-# ---------------------------------------------------------------------------
-.vscode/
-.idea/
-Thumbs.db
-desktop.ini
-.DS_Store
+.venv/
+# Presentaciones (material de exposicion, no codigo): no se suben
+*.pptx
