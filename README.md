@@ -10,6 +10,11 @@ servidor y no depende de servicios en la nube ni de APIs de pago.
 - Etiqueta **DESCONOCIDO** cuando la evidencia no es suficiente.
 - Aprendizaje incremental **controlado**: solo se añaden muestras nuevas si tú
   las confirmas.
+- **Cargar foto (jpg)**: registra o reconoce desde UNA foto (el nombre sale
+  del nombre del archivo). Si hay varias caras, identifica a **todas** y
+  muestra la foto con cajas y nombres.
+- **Mejoramiento de imagen**: las fotos oscuras, ruidosas o pequeñas se
+  "rescatan" automáticamente antes de rendirse (segundo proyecto del curso).
 - Base de datos SQLite creada automáticamente.
 - Todo el código propio está comentado en español.
 
@@ -169,6 +174,37 @@ Lista con id, nombre, número de muestras y fecha de registro. Desde ahí puedes
 - **Eliminar persona**: borra la persona, sus embeddings y sus fotografías.
 
 ---
+
+### Cargar foto (jpg) — individual o en grupo
+
+Además de la cámara, el portero también trabaja con **fotos de archivo**,
+de a una por vez.
+
+**Una sola cara** (el nombre sale del archivo: `juan_perez.jpg` → «juan perez»):
+
+- Si coincide con alguien registrado → ofrece **anexar la foto a su carpeta**
+  `faces/<id>_<nombre>/` como nueva muestra validada.
+- Si no coincide con nadie → ofrece **registrar a la persona** con esa foto.
+- Antes de confirmar se abre una **ventana con la foto y el cuadro** de lo
+  identificado.
+- Validaciones iguales a las de la cámara. La **nitidez se mide normalizada
+  a 300 px** (las fotos de celular en alta resolución no dan falsos
+  «borrosa») y las fotos verticales se enderezan solas (orientación EXIF).
+
+**Foto en grupo** (varias caras):
+
+- Identifica a **todas** las personas y abre la ventana con la foto anotada:
+  cajas **verdes** con nombre y similitud, **rojas** para desconocidos.
+- Botón «Guardar copia en resultados/» — la foto original nunca se modifica.
+- Registrar/anexar queda para fotos individuales (evita ambigüedad).
+
+**Archivos implicados**: `fotos.py` (lógica de fotos) y `mejorar_imagen.py`
+(mejoramiento: si un frame muy degradado no produce detección, el motor lo
+mejora y reintenta una vez — ver `config.REINTENTAR_DETECCION_MEJORANDO`).
+
+**Pruebas automáticas**: `pruebas/probar_foto.py` (flujo individual, 4/4) y
+`pruebas/probar_foto_grupo.py` (modo grupo). Usan una base de datos temporal:
+no tocan tus datos reales.
 
 ## 4. Estructura del proyecto
 
