@@ -30,12 +30,13 @@ Por eso PanelCamara usa dos hilos:
 import logging
 import threading
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import cv2
 from PIL import Image, ImageTk
 
 import base_datos
+import fotos
 import config
 import reconocer
 import registrar
@@ -885,13 +886,62 @@ class VentanaPersonas(tk.Toplevel):
 # ---------------------------------------------------------------------------
 
 
+class VentanaFotoIdentificada(tk.Toplevel):
+    """Muestra la foto cargada con las cajas y nombres dibujados.
+
+    Aparece al identificar una foto (individual o en grupo). Incluye un
+    boton para guardar una copia anotada en resultados/: la foto original
+    del usuario nunca se modifica.
+    """
+
+    def __init__(self, maestro, ruta_original, imagen_anotada, titulo, resumen=""):
+        super().__init__(maestro)
+        self.title(titulo)
+        self.ruta_original = ruta_original
+        self.imagen_anotada = imagen_anotada
+
+        contenedor = ttk.Frame(self, padding=10)
+        contenedor.pack(fill="both", expand=True)
+
+        # La imagen se escala para que quepa cómoda en pantalla.
+        from PIL import Image, ImageTk
+
+        rgb = cv2.cvtColor(imagen_anotada, cv2.COLOR_BGR2RGB)
+        pil = Image.fromarray(rgb)
+        pil.thumbnail((920, 640))
+        # Referencia guardada: si se pierde, Tk borra la imagen.
+        self._foto_tk = ImageTk.PhotoImage(pil)
+
+        ttk.Label(contenedor, image=self._foto_tk).pack()
+        if resumen:
+            ttk.Label(
+                contenedor, text=resumen, foreground="#333333",
+                font=("Segoe UI", 10), wraplength=880,
+            ).pack(pady=(8, 4))
+
+        botones = ttk.Frame(contenedor)
+        botones.pack(pady=6)
+        ttk.Button(
+            botones, text="Guardar copia en resultados/",
+            command=self.guardar,
+        ).pack(side="left", padx=4)
+        ttk.Button(botones, text="Cerrar", command=self.destroy).pack(side="left", padx=4)
+
+    def guardar(self):
+        try:
+            destino = fotos.guardar_anotada(self.ruta_original, self.imagen_anotada)
+        except Exception as error:  # noqa: BLE001
+            messagebox.showerror("No se pudo guardar", str(error), parent=self)
+            return
+        messagebox.showinfo("Listo", "Guardada en:\n{}".format(destino), parent=self)
+
+
 class Aplicacion(tk.Tk):
     """Menu principal de la aplicacion."""
 
     def __init__(self, motor, reconocedor):
         super().__init__()
         self.title("Reconocimiento facial local")
-        self.geometry("420x330")
         self.resizable(False, False)
 
         self.motor = motor
@@ -899,6 +949,10 @@ class Aplicacion(tk.Tk):
 
         self._construir_interfaz()
         self._actualizar_resumen()
+        # El tamano se ajusta al contenido: con el escalado DPI de Windows
+        # (125% / 150%) una altura fija dejaba el resumen de abajo cortado.
+        self.update_idletasks()
+        self.geometry("")
         self.protocol("WM_DELETE_WINDOW", self.salir)
 
     def _construir_interfaz(self):
@@ -919,6 +973,7 @@ class Aplicacion(tk.Tk):
         for texto, accion in (
             ("Agregar persona", self.agregar_persona),
             ("Reconocer personas", self.reconocer_personas),
+            ("Cargar foto (jpg)", self.cargar_foto),
             ("Personas registradas", self.ver_personas),
         ):
             ttk.Button(contenedor, text=texto, command=accion, width=30).pack(pady=5)
@@ -926,8 +981,11 @@ class Aplicacion(tk.Tk):
         ttk.Separator(contenedor, orient="horizontal").pack(fill="x", pady=12)
         ttk.Button(contenedor, text="Salir", command=self.salir, width=30).pack()
 
-        self.etiqueta_resumen = ttk.Label(contenedor, text="", foreground="#666666")
-        self.etiqueta_resumen.pack(pady=(14, 0))
+        self.etiqueta_resumen = ttk.Label(
+            contenedor, text="", foreground="#1F3864",
+            font=("Segoe UI", 10, "bold"),
+        )
+        self.etiqueta_resumen.pack(pady=(16, 0))
 
     def _actualizar_resumen(self):
         personas = base_datos.obtener_personas()
@@ -965,6 +1023,145 @@ class Aplicacion(tk.Tk):
         )
         self.wait_window(ventana)
         self._actualizar_resumen()
+
+    def cargar_foto(self):
+        """
+        Nuevo apartado: identificar / anexar / registrar desde UNA foto jpg.
+
+        El nombre de la persona sale del nombre del archivo
+        (ejemplo: 'juan_perez.jpg' -> 'juan perez').
+        """
+        ruta = filedialog.askopenfilename(
+            parent=self,
+            title="Cargar foto (el nombre del archivo sera el de la persona)",
+            filetypes=[("Imagen JPG", "*.jpg *.jpeg")],
+        )
+        if not ruta:
+            return
+
+        self.config(cursor="watch")
+        self.update_idletasks()
+        try:
+            analisis = fotos.procesar_foto(self.motor, self.reconocedor, ruta)
+        except Exception as error:  # noqa: BLE001
+            self.config(cursor="")
+            messagebox.showerror("Error al procesar la foto", str(error), parent=self)
+            return
+        self.config(cursor="")
+
+        if analisis.estado == "error_lectura":
+            messagebox.showerror("Foto ilegible", analisis.motivo, parent=self)
+            return
+        if analisis.estado == "sin_rostro":
+            messagebox.showwarning("Sin rostro", analisis.motivo, parent=self)
+            return
+
+        # --- MODO GRUPO: identificar TODAS las caras de la foto ------------
+        if analisis.rostros_total > 1:
+            anotada = analisis.imagen.copy()
+            resumen = []
+            for indice, rostro_grupo in enumerate(analisis.rostros, start=1):
+                resultado = self.reconocedor.identificar(rostro_grupo.embedding)
+                reconocer.dibujar_resultado(
+                    anotada, rostro_grupo.caja, resultado.etiqueta, resultado.color)
+                resumen.append("{}. {}".format(indice, resultado.etiqueta))
+            VentanaFotoIdentificada(
+                self, ruta, anotada,
+                "Foto en grupo: {} rostros".format(analisis.rostros_total),
+                "  |  ".join(resumen),
+            )
+            return
+
+        if analisis.estado == "calidad":
+            messagebox.showwarning(
+                "Calidad insuficiente",
+                analisis.motivo + "\n\nPrueba con una foto mas nitida, con mejor luz\n"
+                "y con el rostro mas grande.",
+                parent=self,
+            )
+            return
+
+        nota = ""
+        if analisis.varios_rostros:
+            nota = "\n\n(Ojo: se detectaron {} rostros; se uso el mas grande.)".format(
+                analisis.rostros_total)
+
+        if analisis.estado == "reconocido":
+            resultado = analisis.resultado
+            anotada_uno = analisis.imagen.copy()
+            reconocer.dibujar_resultado(
+                anotada_uno, analisis.rostro.caja, resultado.etiqueta, resultado.color)
+            VentanaFotoIdentificada(
+                self, ruta, anotada_uno, "Persona reconocida", resultado.etiqueta)
+            if messagebox.askyesno(
+                "Persona reconocida",
+                "Es {} (similitud {:.2f}).{}\n\n"
+                "¿Anexar esta foto a su perfil como nueva muestra?".format(
+                    resultado.nombre, resultado.similitud, nota),
+                parent=self,
+            ):
+                try:
+                    fotos.anexar_muestra_foto(resultado.persona_id, ruta, analisis.rostro)
+                except Exception as error:  # noqa: BLE001
+                    messagebox.showerror("No se pudo anexar", str(error), parent=self)
+                    return
+                self.reconocedor.recargar()
+                self._actualizar_resumen()
+                messagebox.showinfo(
+                    "Listo",
+                    "Foto anexada al perfil de {}.".format(resultado.nombre),
+                    parent=self,
+                )
+            return
+
+        # --- DESCONOCIDO ----------------------------------------------------
+        nombre = analisis.nombre_sugerido
+        anotada_des = analisis.imagen.copy()
+        reconocer.dibujar_resultado(
+            anotada_des, analisis.rostro.caja,
+            "?{}?".format(nombre), reconocer.COLOR_DESCONOCIDO)
+        VentanaFotoIdentificada(
+            self, ruta, anotada_des, "Persona desconocida",
+            "No coincide con nadie registrado (posible nombre del archivo: {})".format(nombre))
+        if base_datos.existe_nombre(nombre):
+            # Ya hay alguien con ese nombre pero la foto no lo coincide:
+            # el usuario decide si es la misma persona (anexar) o no.
+            if messagebox.askyesno(
+                "Desconocido con nombre conocido",
+                "La foto no coincide con nadie, pero ya existe una persona\n"
+                "llamada '{}'.{}\n\n¿Anexarla a su perfil de todos modos?".format(nombre, nota),
+                parent=self,
+            ):
+                persona_id = fotos.id_de_nombre(nombre)
+                try:
+                    fotos.anexar_muestra_foto(persona_id, ruta, analisis.rostro)
+                except Exception as error:  # noqa: BLE001
+                    messagebox.showerror("No se pudo anexar", str(error), parent=self)
+                    return
+                self.reconocedor.recargar()
+                self._actualizar_resumen()
+                messagebox.showinfo("Listo", "Foto anexada al perfil de {}.".format(nombre), parent=self)
+            return
+
+        if messagebox.askyesno(
+            "Persona desconocida",
+            "No coincide con nadie registrado.{}\n\n"
+            "¿Registrar como nueva persona '{}'\nusando solo esta foto?".format(nota, nombre),
+            parent=self,
+        ):
+            try:
+                persona_id = fotos.registrar_desde_foto(nombre, ruta, analisis.rostro)
+            except Exception as error:  # noqa: BLE001
+                messagebox.showerror("No se pudo registrar", str(error), parent=self)
+                return
+            self.reconocedor.recargar()
+            self._actualizar_resumen()
+            messagebox.showinfo(
+                "Listo",
+                "'{}' quedo registrada con esta foto.\n"
+                "Puedes seguir anexandole fotos con 'Cargar foto'.".format(nombre),
+                parent=self,
+            )
 
     def ver_personas(self):
         ventana = VentanaPersonas(self, self.motor, self.reconocedor)
