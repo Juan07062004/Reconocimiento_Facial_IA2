@@ -24,7 +24,7 @@ servidor y no depende de servicios en la nube ni de APIs de pago.
 
 | Requisito | Detalle |
 |---|---|
-| Sistema | Windows, Linux o macOS |
+| Sistema | Windows |
 | Python | **3.9 – 3.12** (probado en 3.10) |
 | Cámara | Webcam integrada o USB |
 | Espacio | ~1.5 GB (dependencias + modelo de 281 MB) |
